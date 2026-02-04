@@ -137,3 +137,10 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+REPORT_STYLE_GUIDE.md
+REPORT_STYLE_GUIDE_KO.md
+/reports
+CLAUDE_CODE_PROMPT_KO.md
+CLAUDE_CODE_PROMPT.md
+/.claude
+/data

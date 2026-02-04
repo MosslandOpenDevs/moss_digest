@@ -1,0 +1,55 @@
+{
+  "medium": {
+    "feeds": [
+      {
+        "name": "mossland-blog",
+        "url": "https://medium.com/feed/mossland-blog",
+        "enabled": true
+      }
+    ]
+  },
+  "github": {
+    "repositories": [
+      {
+        "owner": "mossland",
+        "repo": "Disclosure-and-Materials",
+        "type": "docs",
+        "description": "공시 자료 및 문서 (README only)",
+        "trackFiles": [],
+        "parseReadmeLinks": true,
+        "enabled": true
+      }
+    ],
+    "organizations": [
+      {
+        "name": "mossland",
+        "type": "official",
+        "description": "공식 저장소 (User account, not organization)",
+        "trackNewRepos": true,
+        "trackCommits": true,
+        "trackReleases": true,
+        "enabled": true
+      },
+      {
+        "name": "MosslandOpenDevs",
+        "type": "development",
+        "description": "오픈소스 개발 활동",
+        "trackNewRepos": true,
+        "trackCommits": true,
+        "trackReleases": true,
+        "enabled": true
+      }
+    ]
+  },
+  "reporting": {
+    "schedule": {
+      "monthly": "0 0 1 * *",
+      "quarterly": "0 0 1 1,4,7,10 *",
+      "annual": "0 0 1 1 *"
+    },
+    "outputs": {
+      "html": true,
+      "pdf": true
+    }
+  }
+}
