@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * 월별 커밋 트렌드 데이터 생성
+ * 월별 커밋 트렌드 데이터 생성 (연간 보고서용)
  * @param {Object} data - 수집된 데이터
  * @param {number} year - 연도
  * @returns {Array} - 월별 커밋 수 배열 (1-12월)
@@ -35,10 +35,41 @@ function generateMonthlyCommitTrend(data, year) {
     });
   }
 
-  // 조직 활동 집계 (날짜별 커밋 정보가 없으므로 스킵)
-  // Note: countCommits는 숫자만 반환하므로 월별 분리가 어려움
-
   return monthlyCommits;
+}
+
+/**
+ * 주차별 커밋 트렌드 데이터 생성 (월간/분기별 보고서용)
+ * @param {Object} data - 수집된 데이터
+ * @param {Date} startDate - 시작일
+ * @param {Date} endDate - 종료일
+ * @returns {Array} - 주차별 커밋 수 배열
+ */
+function generateWeeklyCommitTrend(data, startDate, endDate) {
+  // 주차 수 계산
+  const timeDiff = endDate - startDate;
+  const weekCount = Math.ceil(timeDiff / (7 * 24 * 60 * 60 * 1000));
+  const weeklyCommits = new Array(weekCount).fill(0);
+
+  // 저장소 커밋 집계
+  if (data.repositories) {
+    Object.values(data.repositories).forEach(repo => {
+      if (repo.commits) {
+        repo.commits.forEach(commit => {
+          const commitDate = new Date(commit.date);
+          if (commitDate >= startDate && commitDate <= endDate) {
+            // 시작일로부터 몇 주차인지 계산
+            const weekIndex = Math.floor((commitDate - startDate) / (7 * 24 * 60 * 60 * 1000));
+            if (weekIndex >= 0 && weekIndex < weekCount) {
+              weeklyCommits[weekIndex]++;
+            }
+          }
+        });
+      }
+    });
+  }
+
+  return weeklyCommits;
 }
 
 /**
@@ -56,16 +87,45 @@ export async function generateSummaryReport(data, options) {
     quarter
   } = options;
 
+  // 보고서 타입 결정
+  let reportType = 'annual'; // 기본값
+  if (month) {
+    reportType = 'monthly';
+  } else if (quarter) {
+    reportType = 'quarterly';
+  }
+
+  // 커밋 트렌드 데이터 및 라벨 생성
+  let commitTrendData;
+  let commitTrendLabels;
+  let commitTrendTitle;
+
+  if (reportType === 'annual') {
+    // 연간: 월별
+    commitTrendData = generateMonthlyCommitTrend(data, year);
+    commitTrendLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    commitTrendTitle = '월별 커밋 트렌드';
+  } else {
+    // 월간/분기: 주차별
+    const { startDate, endDate } = calculatePeriodRange(year, month, quarter);
+    commitTrendData = generateWeeklyCommitTrend(data, startDate, endDate);
+    commitTrendLabels = commitTrendData.map((_, i) => `Week ${i + 1}`);
+    commitTrendTitle = '주차별 커밋 트렌드';
+  }
+
   // 템플릿 데이터 준비
   const templateData = {
     reportTitle,
     period: period || formatPeriod(year, month, quarter),
+    reportType,
     metrics: calculateMetrics(data),
     blogPosts: extractBlogPosts(data),
     repositories: extractRepositories(data),
     newRepositories: extractNewRepositories(data),
     externalLinks: extractExternalLinks(data),
-    monthlyCommitTrend: generateMonthlyCommitTrend(data, year)
+    commitTrendData,
+    commitTrendLabels,
+    commitTrendTitle
   };
 
   // 템플릿 렌더링
@@ -73,6 +133,34 @@ export async function generateSummaryReport(data, options) {
   const html = await ejs.renderFile(templatePath, templateData);
 
   return html;
+}
+
+/**
+ * 기간 범위 계산 (시작일, 종료일)
+ * @param {number} year - 연도
+ * @param {number} [month] - 월 (1-12)
+ * @param {number} [quarter] - 분기 (1-4)
+ * @returns {Object} - {startDate, endDate}
+ */
+function calculatePeriodRange(year, month, quarter) {
+  let startDate, endDate;
+
+  if (month) {
+    // 월간: 해당 월의 첫날~마지막날
+    startDate = new Date(year, month - 1, 1);
+    endDate = new Date(year, month, 0, 23, 59, 59);
+  } else if (quarter) {
+    // 분기: 해당 분기의 첫날~마지막날
+    const startMonth = (quarter - 1) * 3;
+    startDate = new Date(year, startMonth, 1);
+    endDate = new Date(year, startMonth + 3, 0, 23, 59, 59);
+  } else {
+    // 연간: 1월 1일~12월 31일
+    startDate = new Date(year, 0, 1);
+    endDate = new Date(year, 11, 31, 23, 59, 59);
+  }
+
+  return { startDate, endDate };
 }
 
 /**

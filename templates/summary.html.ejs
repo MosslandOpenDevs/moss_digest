@@ -616,14 +616,14 @@
     </div>
   </section>
 
-  <!-- Monthly Commit Trend -->
+  <!-- Commit Trend -->
   <section class="section">
     <div class="section-label" data-num="01">통계</div>
-    <h2>월별 <em>커밋 트렌드</em></h2>
-    <p class="section-desc">연간 개발 활동의 흐름을 한눈에 확인할 수 있습니다.</p>
+    <h2><%= commitTrendTitle.split(' ')[0] %> <em><%= commitTrendTitle.split(' ')[1] %></em></h2>
+    <p class="section-desc"><%= reportType === 'annual' ? '연간' : reportType === 'quarterly' ? '분기별' : '월간' %> 개발 활동의 흐름을 한눈에 확인할 수 있습니다.</p>
 
     <div class="chart-container">
-      <canvas id="monthlyCommitChart"></canvas>
+      <canvas id="commitTrendChart"></canvas>
     </div>
   </section>
 
@@ -758,17 +758,18 @@
 
   <!-- Scripts -->
   <script>
-    // Monthly Commit Trend Chart (Dark Mode)
-    const ctx = document.getElementById('monthlyCommitChart');
-    const monthlyData = <%- JSON.stringify(monthlyCommitTrend) %>;
+    // Commit Trend Chart (Dark Mode)
+    const ctx = document.getElementById('commitTrendChart');
+    const commitData = <%- JSON.stringify(commitTrendData) %>;
+    const commitLabels = <%- JSON.stringify(commitTrendLabels) %>;
 
     new Chart(ctx, {
       type: 'line',
       data: {
-        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        labels: commitLabels,
         datasets: [{
           label: 'Commits',
-          data: monthlyData,
+          data: commitData,
           borderColor: '#00d4aa',
           backgroundColor: 'rgba(0, 212, 170, 0.1)',
           fill: true,
@@ -826,7 +827,7 @@
                 family: "'Space Mono', monospace",
                 size: 11
               },
-              stepSize: Math.max(1, Math.ceil(Math.max(...monthlyData) / 5))
+              stepSize: Math.max(1, Math.ceil(Math.max(...commitData) / 5))
             }
           },
           x: {

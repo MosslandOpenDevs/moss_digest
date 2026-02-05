@@ -185,9 +185,15 @@ LLM_PROVIDER=lmstudio
 GEMINI_API_KEY=your_gemini_api_key_here
 
 # LM Studio API (when LLM_PROVIDER=lmstudio)
-# Requires LM Studio server running locally
-LMSTUDIO_URL=http://localhost:8899/v1
-LMSTUDIO_MODEL=qwen2.5-32b-instruct
+# Server Configuration
+LMSTUDIO_URL=http://localhost:8899/v1          # Local or remote (e.g., http://100.71.81.27:8899/v1)
+LMSTUDIO_MODEL=qwen2.5-32b-instruct            # Model name from LM Studio
+
+# Generation Parameters
+LMSTUDIO_TEMPERATURE=0.3                       # 0.0-1.0 (lower = more consistent)
+LMSTUDIO_MAX_TOKENS=500                        # Max summary length
+LMSTUDIO_MAX_CONTEXT_LENGTH=8000               # Max input text length
+LMSTUDIO_TIMEOUT=300000                        # API timeout in ms (5min default, 10min+ for remote)
 
 # Optional: Notifications
 SLACK_WEBHOOK_URL=
@@ -269,7 +275,9 @@ DISCORD_WEBHOOK_URL=
 
 **Features:**
 - Dark mode design with elegant typography (Instrument Serif, DM Sans, Space Mono)
-- **Monthly Commit Trend Graph** (interactive Chart.js visualization)
+- **Dynamic Commit Trend Graph** (interactive Chart.js visualization)
+  - Annual reports: Monthly trends (Jan-Dec)
+  - Monthly/Quarterly reports: Weekly trends (Week 1, Week 2, ...)
 - AI-generated summaries for blog posts and disclosure documents
 - Fixed navigation bar with smooth scrolling
 - Fade-up animations for content sections
@@ -370,16 +378,107 @@ npx mossdigest collect --year 2025 --quarter 4
 
 ### Report Generation
 
+MossDigest generates three types of reports, each with customized commit trend visualizations:
+
+#### 📅 Monthly Report
+Generates a report for a specific month with **weekly commit trends**.
+
 ```bash
-# Monthly report
 npx mossdigest generate --type monthly --year 2025 --month 12
+```
 
-# Quarterly report
+**Features:**
+- 📊 **Weekly Commit Trend Chart**: Shows commit activity for each week of the month (Week 1, Week 2, etc.)
+- 📝 Blog posts published during the month
+- 💻 All commits, PRs, issues from the selected month
+- 🚀 Releases and new repositories created in that month
+- 👥 Active contributors for the month
+
+**Output Location:**
+```
+reports/{year}/monthly/{month}/summary.html
+```
+
+**Example:**
+```bash
+# Generate December 2025 monthly report
+npx mossdigest generate --type monthly --year 2025 --month 12
+# Output: reports/2025/monthly/12/summary.html
+```
+
+---
+
+#### 📊 Quarterly Report
+Generates a report for a specific quarter (Q1-Q4) with **weekly commit trends**.
+
+```bash
 npx mossdigest generate --type quarterly --year 2025 --quarter 4
+```
 
-# Annual report
+**Features:**
+- 📊 **Weekly Commit Trend Chart**: Shows commit activity for each week of the quarter (~13 weeks)
+- 📝 All blog posts from the 3-month period
+- 💻 Aggregated commits, PRs, issues across the quarter
+- 🚀 All releases and new repositories in the quarter
+- 👥 Active contributors throughout the quarter
+
+**Quarter Definitions:**
+- Q1: January - March
+- Q2: April - June
+- Q3: July - September
+- Q4: October - December
+
+**Output Location:**
+```
+reports/{year}/quarterly/Q{quarter}/summary.html
+```
+
+**Example:**
+```bash
+# Generate Q4 2025 quarterly report (Oct-Dec)
+npx mossdigest generate --type quarterly --year 2025 --quarter 4
+# Output: reports/2025/quarterly/Q4/summary.html
+```
+
+---
+
+#### 📈 Annual Report
+Generates a yearly summary report with **monthly commit trends**.
+
+```bash
 npx mossdigest generate --type annual --year 2025
 ```
+
+**Features:**
+- 📊 **Monthly Commit Trend Chart**: Shows commit activity for each month (Jan-Dec) of the year
+- 📝 All blog posts from the entire year
+- 💻 Year-long commit statistics, PRs, and issues
+- 🚀 All releases and new repositories created in the year
+- 👥 Top contributors for the year
+
+**Output Location:**
+```
+reports/{year}/annual/summary.html
+```
+
+**Example:**
+```bash
+# Generate 2025 annual report
+npx mossdigest generate --type annual --year 2025
+# Output: reports/2025/annual/summary.html
+```
+
+---
+
+#### 🔍 Commit Trend Visualization Differences
+
+| Report Type | Chart Granularity | X-Axis Labels | Time Period |
+|-------------|-------------------|---------------|-------------|
+| **Monthly** | Weekly | Week 1, Week 2, ... | ~4-5 weeks |
+| **Quarterly** | Weekly | Week 1, Week 2, ... | ~13 weeks |
+| **Annual** | Monthly | Jan, Feb, Mar, ... | 12 months |
+
+> **Note**: The commit trend visualization automatically adjusts based on report type to provide the most meaningful insights for each time period.
 
 ### Full Pipeline
 

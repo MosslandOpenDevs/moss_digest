@@ -12,9 +12,11 @@ MossDigest는 Medium 블로그, GitHub 저장소, 공시 문서 등 다양한 �
 
 | 주기 | 빈도 | 산출물 |
 |------|------|--------|
-| 월간 | 12회/년 | 요약 HTML + 상세 PDF |
-| 분기 | 4회/년 | 요약 HTML + 상세 PDF |
-| 연간 | 1회/년 | 요약 HTML + 상세 PDF |
+| 월간 | 12회/년 | 요약 HTML (다크 모드 디자인) |
+| 분기 | 4회/년 | 요약 HTML (다크 모드 디자인) |
+| 연간 | 1회/년 | 요약 HTML (다크 모드 디자인) |
+
+> **참고**: PDF 생성 기능은 현재 비활성화되어 있습니다 (`src/generators/pdf.js`에서 재활성화 가능)
 
 ---
 
@@ -24,9 +26,10 @@ MossDigest는 Medium 블로그, GitHub 저장소, 공시 문서 등 다양한 �
 
 | 소스 | URL | 수집 항목 |
 |------|-----|----------|
-| mossland-blog | `https://medium.com/feed/mossland-blog` | 제목, 발행일, 링크, 요약 |
+| mossland-blog | `https://medium.com/feed/mossland-blog` | 제목, 발행일, 링크, 요약, **AI 요약** |
 
-> 참고: `@mosscoin`과 `mossland-blog`는 같은 퍼블리케이션을 가리키므로, 중복을 피하기 위해 `mossland-blog`만 사용합니다.
+> **참고**: `@mosscoin`과 `mossland-blog`는 같은 퍼블리케이션을 가리키므로, 중복을 피하기 위해 `mossland-blog`만 사용합니다.
+> **AI 요약**: LM Studio (로컬 LLM) 또는 Google Gemini API를 사용하여 자동으로 간결한 요약을 생성합니다
 
 ### GitHub 저장소
 
@@ -38,8 +41,10 @@ MossDigest는 Medium 블로그, GitHub 저장소, 공시 문서 등 다양한 �
 
 | 조직 | 용도 | 수집 항목 |
 |------|------|----------|
-| [mossland](https://github.com/mossland) | 공식 저장소 | 신규 repo, 커밋, 릴리즈 |
-| [MosslandOpenDevs](https://github.com/MosslandOpenDevs) | 오픈소스 개발 | 신규 repo, 커밋, 릴리즈 |
+| [mossland](https://github.com/mossland) | 공식 저장소 (User 계정) | 신규 repo, 커밋, 릴리즈, **Pull Request, Issue, Contributors** |
+| [MosslandOpenDevs](https://github.com/MosslandOpenDevs) | 오픈소스 개발 | 신규 repo, 커밋, 릴리즈, **Pull Request, Issue, Contributors** |
+
+> **참고**: GitHub Organization과 User 계정 모두 지원하며 자동 감지됩니다
 
 ### 외부 링크 자동 수집
 
@@ -48,6 +53,11 @@ MossDigest는 Medium 블로그, GitHub 저장소, 공시 문서 등 다양한 �
 **지원 날짜 형식:**
 - 영문: `January 9, 2023`
 - 한글: `2025년 1월 9일`
+
+**기능:**
+- 공시 링크에서 자동으로 콘텐츠 가져오기
+- **공시 문서(PDF, HTML)의 AI 기반 요약 생성**
+- 로컬 LLM(LM Studio)과 클라우드 API(Google Gemini) 지원
 
 ---
 
@@ -69,7 +79,11 @@ MossDigest/
 │   │   ├── html.js
 │   │   └── pdf.js
 │   ├── utils/
-│   │   └── date-filter.js
+│   │   ├── date-filter.js
+│   │   └── summarizer.js   # AI 요약 (LM Studio + Gemini)
+│   ├── commands/
+│   │   ├── collect.js
+│   │   └── generate.js
 │   └── index.js
 ├── templates/              # 보고서 템플릿
 │   ├── summary.html.ejs
@@ -163,6 +177,24 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 GITHUB_APP_ID=
 GITHUB_APP_PRIVATE_KEY=
 
+# LLM 설정 (AI 요약 기능)
+# LLM_PROVIDER: "gemini" 또는 "lmstudio"
+LLM_PROVIDER=lmstudio
+
+# Google Gemini API (LLM_PROVIDER=gemini 사용 시)
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# LM Studio API (LLM_PROVIDER=lmstudio 사용 시)
+# 서버 설정
+LMSTUDIO_URL=http://localhost:8899/v1          # 로컬 또는 원격 (예: http://100.71.81.27:8899/v1)
+LMSTUDIO_MODEL=qwen2.5-32b-instruct            # LM Studio의 모델 이름
+
+# 생성 파라미터
+LMSTUDIO_TEMPERATURE=0.3                       # 0.0-1.0 (낮을수록 일관적)
+LMSTUDIO_MAX_TOKENS=500                        # 최대 요약 길이
+LMSTUDIO_MAX_CONTEXT_LENGTH=8000               # 최대 입력 텍스트 길이
+LMSTUDIO_TIMEOUT=300000                        # API 타임아웃(ms) (기본 5분, 원격 시 10분+ 권장)
+
 # Optional: 알림 설정
 SLACK_WEBHOOK_URL=
 DISCORD_WEBHOOK_URL=
@@ -230,21 +262,31 @@ DISCORD_WEBHOOK_URL=
 
 ## 📊 보고서 구성
 
-### 요약 보고서 (HTML)
+### 요약 보고서 (HTML) - 다크 모드 디자인
 
-- 핵심 지표 대시보드
-- 주요 하이라이트 (3~5개)
-- 블로그 발행 목록
-- 개발 활동 요약 (신규 repo, 주요 커밋)
-- 인터랙티브 차트
+**핵심 지표 대시보드:**
+- 📝 전체 블로그 포스트 수
+- 💻 전체 커밋 수
+- 🔀 Pull Request (병합률 % 포함)
+- 🐛 Issue (해결률 % 포함)
+- 👥 기여자 수
+- 📦 신규 저장소 수
+- 🚀 릴리즈 수
 
-### 상세 보고서 (PDF)
+**주요 기능:**
+- 다크 모드 디자인과 세련된 타이포그래피 (Instrument Serif, DM Sans, Space Mono)
+- **동적 커밋 트렌드 그래프** (인터랙티브 Chart.js 시각화)
+  - 연간 보고서: 월별 트렌드 (Jan-Dec)
+  - 월간/분기 보고서: 주차별 트렌드 (Week 1, Week 2, ...)
+- AI 생성 요약 (블로그 포스트 및 공시 문서)
+- 고정 네비게이션 바와 부드러운 스크롤
+- Fade-up 애니메이션 효과
+- 반응형 디자인 (모바일/태블릿/데스크톱)
 
-- 전체 블로그 글 요약
-- GitHub 커밋 상세 로그
-- 파일 변경 내역 전체
-- 통계 테이블
-- 원본 데이터 참조 링크
+### 상세 보고서 (PDF) - 현재 비활성화
+
+> **참고**: PDF 생성 기능은 현재 코드베이스에서 주석 처리되어 있습니다.
+> 재활성화하려면 `src/generators/pdf.js`와 `src/commands/generate.js`의 PDF 생성 코드 주석을 해제하세요.
 
 ### 엔트리포인트 페이지 (web/index.html)
 
@@ -264,9 +306,45 @@ DISCORD_WEBHOOK_URL=
 | 환경변수 관리 | `dotenv` |
 | 설정 검증 | `ajv` |
 | HTML 템플릿 | `ejs` |
-| PDF 생성 | `puppeteer` |
+| PDF 생성 | `puppeteer` (현재 비활성화) |
 | 스케줄링 | `node-cron` |
 | CLI 인터페이스 | `commander` |
+| **AI 요약 (로컬)** | **`openai` (LM Studio 호환)** |
+| **AI 요약 (클라우드)** | **`@google/generative-ai` (Gemini)** |
+| **PDF 텍스트 추출** | **`pdf-parse`** |
+| **차트 & 시각화** | **Chart.js (CDN)** |
+
+---
+
+## 🤖 AI 요약 설정
+
+MossDigest는 자동 콘텐츠 요약을 위해 두 가지 LLM 제공자를 지원합니다:
+
+### 방법 1: LM Studio (프라이버시 & 비용 측면에서 권장)
+
+1. **다운로드 & 설치** [LM Studio](https://lmstudio.ai/)
+2. **모델 로드** (예: `qwen2.5-32b-instruct`)
+3. **로컬 서버 시작**
+   - LM Studio에서 "Start Server" 클릭
+   - 기본 포트: `8899`
+4. **.env 설정**
+   ```env
+   LLM_PROVIDER=lmstudio
+   LMSTUDIO_URL=http://localhost:8899/v1
+   LMSTUDIO_MODEL=qwen2.5-32b-instruct
+   ```
+
+### 방법 2: Google Gemini API
+
+1. **API 키 발급** [Google AI Studio](https://makersuite.google.com/app/apikey)에서 생성
+2. **.env 설정**
+   ```env
+   LLM_PROVIDER=gemini
+   GEMINI_API_KEY=your_api_key_here
+   ```
+
+> **참고**: Gemini 코드는 현재 `src/utils/summarizer.js`에서 주석 처리되어 있습니다.
+> Gemini를 사용하려면 해당 코드 섹션의 주석을 해제하세요.
 
 ---
 
@@ -300,16 +378,107 @@ npx mossdigest collect --year 2025 --quarter 4
 
 ### 보고서 생성
 
+MossDigest는 세 가지 유형의 보고서를 생성하며, 각각 맞춤형 커밋 트렌드 시각화를 제공합니다:
+
+#### 📅 월간 보고서
+특정 월의 보고서를 **주차별 커밋 트렌드**로 생성합니다.
+
 ```bash
-# 월간 보고서
 npx mossdigest generate --type monthly --year 2025 --month 12
+```
 
-# 분기 보고서
+**기능:**
+- 📊 **주차별 커밋 트렌드 차트**: 해당 월의 주차별 커밋 활동 표시 (Week 1, Week 2 등)
+- 📝 해당 월에 발행된 블로그 포스트
+- 💻 해당 월의 모든 커밋, PR, Issue
+- 🚀 해당 월에 생성된 릴리즈 및 신규 저장소
+- 👥 해당 월의 활성 기여자
+
+**출력 위치:**
+```
+reports/{year}/monthly/{month}/summary.html
+```
+
+**예시:**
+```bash
+# 2025년 12월 월간 보고서 생성
+npx mossdigest generate --type monthly --year 2025 --month 12
+# 출력: reports/2025/monthly/12/summary.html
+```
+
+---
+
+#### 📊 분기별 보고서
+특정 분기(Q1-Q4)의 보고서를 **주차별 커밋 트렌드**로 생성합니다.
+
+```bash
 npx mossdigest generate --type quarterly --year 2025 --quarter 4
+```
 
-# 연간 보고서
+**기능:**
+- 📊 **주차별 커밋 트렌드 차트**: 분기의 주차별 커밋 활동 표시 (~13주)
+- 📝 3개월 기간의 모든 블로그 포스트
+- 💻 분기별 집계된 커밋, PR, Issue
+- 🚀 분기의 모든 릴리즈 및 신규 저장소
+- 👥 분기 전체의 활성 기여자
+
+**분기 정의:**
+- Q1: 1월 - 3월
+- Q2: 4월 - 6월
+- Q3: 7월 - 9월
+- Q4: 10월 - 12월
+
+**출력 위치:**
+```
+reports/{year}/quarterly/Q{quarter}/summary.html
+```
+
+**예시:**
+```bash
+# 2025년 4분기 보고서 생성 (10-12월)
+npx mossdigest generate --type quarterly --year 2025 --quarter 4
+# 출력: reports/2025/quarterly/Q4/summary.html
+```
+
+---
+
+#### 📈 연간 보고서
+연간 요약 보고서를 **월별 커밋 트렌드**로 생성합니다.
+
+```bash
 npx mossdigest generate --type annual --year 2025
 ```
+
+**기능:**
+- 📊 **월별 커밋 트렌드 차트**: 연도의 각 월별 커밋 활동 표시 (Jan-Dec)
+- 📝 연간 전체 블로그 포스트
+- 💻 연간 커밋 통계, PR, Issue
+- 🚀 연간 생성된 모든 릴리즈 및 신규 저장소
+- 👥 연간 주요 기여자
+
+**출력 위치:**
+```
+reports/{year}/annual/summary.html
+```
+
+**예시:**
+```bash
+# 2025년 연간 보고서 생성
+npx mossdigest generate --type annual --year 2025
+# 출력: reports/2025/annual/summary.html
+```
+
+---
+
+#### 🔍 커밋 트렌드 시각화 차이점
+
+| 보고서 유형 | 차트 단위 | X축 레이블 | 기간 |
+|-------------|-----------|-----------|------|
+| **월간** | 주차별 | Week 1, Week 2, ... | ~4-5주 |
+| **분기별** | 주차별 | Week 1, Week 2, ... | ~13주 |
+| **연간** | 월별 | Jan, Feb, Mar, ... | 12개월 |
+
+> **참고**: 커밋 트렌드 시각화는 보고서 유형에 따라 자동으로 조정되어 각 기간에 가장 의미 있는 인사이트를 제공합니다.
 
 ### 전체 파이프라인
 
@@ -340,13 +509,17 @@ npx mossdigest scheduler start
 
 | Phase | 내용 | 상태 |
 |-------|------|------|
-| **Phase 1** | 프로젝트 초기화 + 설정 파일 구조 | 🔴 예정 |
-| **Phase 2** | 데이터 수집기 (Medium + GitHub) | 🔴 예정 |
-| **Phase 3** | 월간 보고서 생성 (HTML + PDF) | 🔴 예정 |
-| **Phase 4** | 분기/연간 보고서 (월간 데이터 집계) | 🟡 예정 |
+| **Phase 1** | 프로젝트 초기화 + 설정 파일 구조 | ✅ **완료** |
+| **Phase 2** | 데이터 수집기 (Medium + GitHub) | ✅ **완료** |
+| **Phase 2.5** | **AI 요약 (LM Studio + Gemini)** | ✅ **완료** |
+| **Phase 2.6** | **GitHub 활동 통계 (PR, Issue, Contributors)** | ✅ **완료** |
+| **Phase 3** | 보고서 생성 (다크 모드 HTML) | ✅ **완료** |
+| **Phase 3.5** | **동적 커밋 트렌드 그래프** | ✅ **완료** |
+| **Phase 4** | 분기/연간 보고서 (월간 데이터 집계) | 🟡 진행 중 |
 | **Phase 5** | 엔트리포인트 페이지 | 🟡 예정 |
-| **Phase 6** | CLI 완성 | 🟡 예정 |
-| **Phase 7** | 자동 스케줄링 | 🟢 예정 |
+| **Phase 6** | CLI 완성 | 🟡 진행 중 |
+| **Phase 7** | 자동 스케줄링 | 🔴 예정 |
+| **Phase 8** | PDF 보고서 생성 (재활성화) | 🔴 선택사항 |
 
 ---
 

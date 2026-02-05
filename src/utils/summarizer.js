@@ -5,7 +5,7 @@
 
 import { createRequire } from 'module';
 
-// CommonJS 모듈을 위한 require 생성
+// CommonJS 모듈을 위한 require 생성 (pdf-parse)
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 
@@ -18,13 +18,32 @@ const LLM_PROVIDER = process.env.LLM_PROVIDER || 'lmstudio'; // 'gemini' 또는 
 
 let lmStudioClient = null;
 let lmStudioModel = null;
+let lmStudioConfig = null;
+
+/**
+ * LM Studio 설정 로드 (환경 변수 우선)
+ */
+function loadLMStudioConfig() {
+  return {
+    url: process.env.LMSTUDIO_URL || 'http://localhost:8899/v1',
+    model: process.env.LMSTUDIO_MODEL || 'qwen2.5-32b-instruct',
+    temperature: parseFloat(process.env.LMSTUDIO_TEMPERATURE || '0.3'),
+    maxTokens: parseInt(process.env.LMSTUDIO_MAX_TOKENS || '500'),
+    maxContextLength: parseInt(process.env.LMSTUDIO_MAX_CONTEXT_LENGTH || '8000'),
+    timeout: parseInt(process.env.LMSTUDIO_TIMEOUT || '300000')
+  };
+}
 
 /**
  * LM Studio 클라이언트 초기화
  */
 async function initializeLMStudio() {
-  const url = process.env.LMSTUDIO_URL || 'http://localhost:8899/v1';
-  const model = process.env.LMSTUDIO_MODEL || 'qwen2.5-32b-instruct';
+  // 환경 변수에서 설정 로드
+  lmStudioConfig = loadLMStudioConfig();
+
+  const url = lmStudioConfig.url;
+  const model = lmStudioConfig.model;
+  const timeout = lmStudioConfig.timeout || 300000; // 기본값: 5분
 
   try {
     // Dynamic import for OpenAI SDK
@@ -32,17 +51,38 @@ async function initializeLMStudio() {
 
     lmStudioClient = new OpenAI({
       baseURL: url,
-      apiKey: 'lm-studio' // LM Studio doesn't require a real API key
+      apiKey: 'lm-studio', // LM Studio doesn't require a real API key
+      timeout: timeout,
+      maxRetries: 0 // 재시도 비활성화 (빠른 실패)
     });
 
     lmStudioModel = model;
 
-    console.log(`✓ LM Studio 초기화 완료`);
+    // 연결 테스트: 모델 목록 가져오기
+    console.log(`🔄 LM Studio 서버 연결 테스트 중...`);
     console.log(`  URL: ${url}`);
+
+    const models = await lmStudioClient.models.list();
+    const modelList = models.data.map(m => m.id);
+
+    if (!modelList.includes(model)) {
+      console.warn(`⚠️  요청한 모델 '${model}'이 서버에 없습니다.`);
+      console.warn(`  사용 가능한 모델: ${modelList.join(', ')}`);
+    }
+
+    console.log(`✓ LM Studio 초기화 완료`);
     console.log(`  Model: ${model}`);
+    console.log(`  Temperature: ${lmStudioConfig.temperature}`);
+    console.log(`  Max Tokens: ${lmStudioConfig.maxTokens}`);
     return true;
   } catch (error) {
     console.error('✗ LM Studio 초기화 실패:', error.message);
+    if (error.code === 'ECONNREFUSED') {
+      console.error(`  서버가 응답하지 않습니다. LM Studio가 실행 중인지 확인하세요.`);
+      console.error(`  예상 주소: ${url}`);
+    } else if (error.code === 'ETIMEDOUT') {
+      console.error(`  연결 시간 초과. 네트워크 연결을 확인하세요.`);
+    }
     return false;
   }
 }
@@ -55,8 +95,8 @@ async function summarizeWithLMStudio(text, title = '') {
     throw new Error('LM Studio 클라이언트가 초기화되지 않았습니다.');
   }
 
-  // 텍스트가 너무 길면 앞부분만 사용
-  const maxLength = 8000; // LM Studio는 더 짧은 컨텍스트 사용
+  // 텍스트가 너무 길면 앞부분만 사용 (설정 파일에서 값 가져오기)
+  const maxLength = lmStudioConfig?.maxContextLength || 8000;
   const truncatedText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 
   const prompt = `다음은 "${title}"라는 제목의 문서입니다. 이 문서의 내용을 3-5줄로 요약해주세요. 핵심 내용만 간결하게 정리해주세요.
@@ -73,14 +113,23 @@ ${truncatedText}
         { role: 'system', content: '당신은 문서 요약 전문가입니다. 주어진 문서의 핵심 내용을 3-5줄로 간결하게 요약합니다.' },
         { role: 'user', content: prompt }
       ],
-      temperature: 0.3,
-      max_tokens: 500
+      temperature: lmStudioConfig?.temperature || 0.3,
+      max_tokens: lmStudioConfig?.maxTokens || 500
     });
 
     const summary = completion.choices[0].message.content.trim();
     return summary;
   } catch (error) {
-    console.error(`  ✗ LM Studio 요약 실패:`, error.message);
+    // 더 자세한 에러 정보 출력
+    if (error.code === 'ECONNREFUSED') {
+      console.error(`  ✗ LM Studio 요약 실패: 서버 연결 거부 (${lmStudioConfig?.url})`);
+    } else if (error.code === 'ETIMEDOUT') {
+      console.error(`  ✗ LM Studio 요약 실패: 연결 시간 초과`);
+    } else if (error.status === 404) {
+      console.error(`  ✗ LM Studio 요약 실패: 모델을 찾을 수 없음 (${lmStudioModel})`);
+    } else {
+      console.error(`  ✗ LM Studio 요약 실패: ${error.message}`);
+    }
     throw error;
   }
 }
