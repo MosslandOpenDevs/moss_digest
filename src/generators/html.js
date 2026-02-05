@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 function generateMonthlyCommitTrend(data, year) {
   const monthlyCommits = new Array(12).fill(0);
 
-  // 저장소 커밋 집계
+  // 저장소 커밋 집계 (repositories)
   if (data.repositories) {
     Object.values(data.repositories).forEach(repo => {
       if (repo.commits) {
@@ -29,6 +29,25 @@ function generateMonthlyCommitTrend(data, year) {
           if (commitDate.getFullYear() === year) {
             const month = commitDate.getMonth(); // 0-11
             monthlyCommits[month]++;
+          }
+        });
+      }
+    });
+  }
+
+  // 조직 저장소 커밋 집계 (organizations)
+  if (data.organizations) {
+    Object.values(data.organizations).forEach(org => {
+      if (org.repositoryActivities) {
+        org.repositoryActivities.forEach(activity => {
+          if (Array.isArray(activity.commits)) {
+            activity.commits.forEach(commit => {
+              const commitDate = new Date(commit.date);
+              if (commitDate.getFullYear() === year) {
+                const month = commitDate.getMonth(); // 0-11
+                monthlyCommits[month]++;
+              }
+            });
           }
         });
       }
@@ -51,7 +70,7 @@ function generateWeeklyCommitTrend(data, startDate, endDate) {
   const weekCount = Math.ceil(timeDiff / (7 * 24 * 60 * 60 * 1000));
   const weeklyCommits = new Array(weekCount).fill(0);
 
-  // 저장소 커밋 집계
+  // 저장소 커밋 집계 (repositories)
   if (data.repositories) {
     Object.values(data.repositories).forEach(repo => {
       if (repo.commits) {
@@ -63,6 +82,27 @@ function generateWeeklyCommitTrend(data, startDate, endDate) {
             if (weekIndex >= 0 && weekIndex < weekCount) {
               weeklyCommits[weekIndex]++;
             }
+          }
+        });
+      }
+    });
+  }
+
+  // 조직 저장소 커밋 집계 (organizations)
+  if (data.organizations) {
+    Object.values(data.organizations).forEach(org => {
+      if (org.repositoryActivities) {
+        org.repositoryActivities.forEach(activity => {
+          if (Array.isArray(activity.commits)) {
+            activity.commits.forEach(commit => {
+              const commitDate = new Date(commit.date);
+              if (commitDate >= startDate && commitDate <= endDate) {
+                const weekIndex = Math.floor((commitDate - startDate) / (7 * 24 * 60 * 60 * 1000));
+                if (weekIndex >= 0 && weekIndex < weekCount) {
+                  weeklyCommits[weekIndex]++;
+                }
+              }
+            });
           }
         });
       }
@@ -275,7 +315,8 @@ function calculateMetrics(data) {
       // 커밋 및 릴리즈
       if (org.repositoryActivities) {
         org.repositoryActivities.forEach(activity => {
-          metrics.totalCommits += activity.commits || 0;
+          // commits는 이제 배열 형태
+          metrics.totalCommits += (Array.isArray(activity.commits) ? activity.commits.length : (activity.commits || 0));
           metrics.totalReleases += activity.releases?.length || 0;
         });
       }
@@ -354,7 +395,7 @@ function extractRepositories(data) {
             name: activity.name,
             fullName: activity.fullName,
             url: activity.url,
-            commits: activity.commits || 0,
+            commits: Array.isArray(activity.commits) ? activity.commits.length : (activity.commits || 0),
             releases: activity.releases?.length || 0,
             isNew: false
           });

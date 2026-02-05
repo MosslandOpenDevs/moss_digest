@@ -88,7 +88,34 @@ async function initializeLMStudio() {
 }
 
 /**
- * LM Studio로 텍스트 요약
+ * Detect if text is primarily Korean or English
+ * @param {string} text - Text to analyze
+ * @returns {string} - 'ko' for Korean, 'en' for English
+ */
+function detectLanguage(text) {
+  // Count Korean characters (Hangul syllables: 0xAC00-0xD7AF)
+  const koreanChars = (text.match(/[\uAC00-\uD7AF]/g) || []).length;
+
+  // Count English letters
+  const englishChars = (text.match(/[a-zA-Z]/g) || []).length;
+
+  // Count total characters (excluding whitespace and punctuation)
+  const totalChars = koreanChars + englishChars;
+
+  // If less than 10 characters, default to Korean (current behavior)
+  if (totalChars < 10) {
+    return 'ko';
+  }
+
+  // Calculate Korean ratio
+  const koreanRatio = koreanChars / totalChars;
+
+  // If more than 30% Korean characters, consider it Korean
+  return koreanRatio > 0.3 ? 'ko' : 'en';
+}
+
+/**
+ * LM Studio로 텍스트 요약 (언어 자동 감지)
  */
 async function summarizeWithLMStudio(text, title = '') {
   if (!lmStudioClient) {
@@ -99,19 +126,39 @@ async function summarizeWithLMStudio(text, title = '') {
   const maxLength = lmStudioConfig?.maxContextLength || 8000;
   const truncatedText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 
-  const prompt = `다음은 "${title}"라는 제목의 문서입니다. 이 문서의 내용을 3-5줄로 요약해주세요. 핵심 내용만 간결하게 정리해주세요.
+  // Detect language
+  const language = detectLanguage(truncatedText);
+
+  // Prepare prompts based on language
+  const prompts = {
+    ko: {
+      system: '당신은 문서 요약 전문가입니다. 주어진 문서의 핵심 내용을 3-5줄로 간결하게 요약합니다.',
+      user: `다음은 "${title}"라는 제목의 문서입니다. 이 문서의 내용을 3-5줄로 요약해주세요. 핵심 내용만 간결하게 정리해주세요.
 
 문서 내용:
 ${truncatedText}
 
-요약:`;
+요약:`
+    },
+    en: {
+      system: 'You are a document summarization expert. Summarize the given document in 3-5 concise sentences, focusing on key points.',
+      user: `Below is a document titled "${title}". Please summarize this document in 3-5 sentences, highlighting only the essential information.
+
+Document content:
+${truncatedText}
+
+Summary:`
+    }
+  };
+
+  const selectedPrompts = prompts[language];
 
   try {
     const completion = await lmStudioClient.chat.completions.create({
       model: lmStudioModel,
       messages: [
-        { role: 'system', content: '당신은 문서 요약 전문가입니다. 주어진 문서의 핵심 내용을 3-5줄로 간결하게 요약합니다.' },
-        { role: 'user', content: prompt }
+        { role: 'system', content: selectedPrompts.system },
+        { role: 'user', content: selectedPrompts.user }
       ],
       temperature: lmStudioConfig?.temperature || 0.3,
       max_tokens: lmStudioConfig?.maxTokens || 500

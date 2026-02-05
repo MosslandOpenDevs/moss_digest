@@ -145,19 +145,19 @@ export function filterNewRepositories(repositories, startDate, endDate) {
 }
 
 /**
- * 저장소의 커밋 수 집계 (정확한 카운트)
+ * 저장소의 커밋 목록 수집 (날짜 정보 포함)
  * @param {string} token - GitHub token
  * @param {string} owner - 저장소 소유자
  * @param {string} repo - 저장소 이름
  * @param {Date} startDate - 시작 날짜
  * @param {Date} endDate - 종료 날짜
- * @returns {Promise<number>} - 커밋 수
+ * @returns {Promise<Array>} - 커밋 목록 (날짜 정보 포함)
  */
 export async function countCommits(token, owner, repo, startDate, endDate) {
   const octokit = createOctokit(token);
 
   try {
-    let totalCommits = 0;
+    let allCommits = [];
     let page = 1;
     const perPage = 100;
 
@@ -173,7 +173,16 @@ export async function countCommits(token, owner, repo, startDate, endDate) {
 
       if (response.data.length === 0) break;
 
-      totalCommits += response.data.length;
+      // 커밋 정보 저장 (날짜, 작성자, 메시지)
+      const commits = response.data.map(commit => ({
+        sha: commit.sha,
+        date: commit.commit.author.date,
+        author: commit.commit.author.name,
+        message: commit.commit.message.split('\n')[0], // 첫 줄만
+        url: commit.html_url
+      }));
+
+      allCommits.push(...commits);
 
       if (page === 1) {
         console.log(`    [DEBUG] ${repo}: page ${page} - ${response.data.length} commits`);
@@ -188,19 +197,19 @@ export async function countCommits(token, owner, repo, startDate, endDate) {
       await sleep(100);
     }
 
-    return totalCommits;
+    return allCommits;
 
   } catch (error) {
     if (error.status === 409) {
       console.log(`    [DEBUG] ${repo}: Empty repository (409)`);
-      return 0;
+      return [];
     }
     if (error.status === 404) {
       console.log(`    [DEBUG] ${repo}: Not found (404)`);
-      return 0;
+      return [];
     }
     console.error(`    [ERROR] Error counting commits for ${owner}/${repo}: ${error.message}`);
-    return 0;
+    return [];
   }
 }
 
