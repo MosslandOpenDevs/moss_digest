@@ -527,6 +527,52 @@ npx mossdigest scheduler start
 
 ---
 
+## 🧭 Future Directions (Open Roadmap)
+
+v1 covers the full **collect → summarize → report** pipeline. The natural next
+step is to evolve MossDigest from a *batch report generator* into an
+*incremental, provider-agnostic activity-intelligence pipeline*. These are
+intentionally open-ended — pick a thread and pull. The codebase is small and
+modular (`collectors` / `generators` / `utils` / `commands`), so most of these
+land as a self-contained module or command. Contributions welcome.
+
+### Performance & reliability
+- **Concurrent, rate-limit-aware collection.** Org collection is currently fully
+  sequential (commits + releases + PRs + issues + contributors, per repo).
+  Introduce bounded concurrency and/or the GitHub GraphQL API to cut wall-clock
+  time on large orgs.
+- **Incremental caching.** Persist per-repo/per-period snapshots so re-runs don't
+  re-fetch unchanged history; back off gracefully when rate-limited.
+- **Surface per-source failures in the report** instead of only logging them, so
+  a partial collection is visible rather than silent.
+
+### Data quality
+- **Period-accurate contributor stats.** `listContributors` is not date-scoped;
+  derive contributors from in-range commits instead.
+- **Real commit line-stats.** `listCommits` doesn't return additions/deletions;
+  enrich via `getCommit`/GraphQL, or drop the always-zero fields.
+- **De-duplicate external-link fetching + cache LLM summaries** (each link is
+  currently fetched twice, and summaries are recomputed every run).
+
+### Summarization
+- **Provider-agnostic LLM layer.** Put LM Studio, Gemini, OpenAI-compatible, and
+  Anthropic behind one interface with graceful fallback, so switching providers
+  is a config change rather than a code edit.
+
+### Output & delivery
+- **Re-enable the detailed PDF report** (the Puppeteer path already exists).
+- **Richer web entry page:** search/filter, cross-period and year-over-year
+  trends, and one-command publish to GitHub Pages.
+- **Wire notifications.** `SLACK_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` already
+  exist in `.env` but are unused — post report links on completion.
+
+### Developer experience
+- **Expand tests** with mocked Octokit/RSS integration tests and HTML snapshot
+  tests, and add **GitHub Actions CI** to run `npm test` on every PR.
+- Add ESLint/Prettier for a consistent style.
+
+---
+
 ## 📝 License
 
 MIT License
