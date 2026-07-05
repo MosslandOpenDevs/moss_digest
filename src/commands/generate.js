@@ -18,7 +18,13 @@ const __dirname = path.dirname(__filename);
  */
 export async function generateReports(options) {
   try {
-    const { type, year, month, quarter } = options;
+    const { type, month, quarter } = options;
+
+    // 연도 미지정 시 현재 연도로 기본 설정 (경로에 undefined가 들어가는 것 방지)
+    const year = Number.isInteger(options.year) ? options.year : new Date().getFullYear();
+    if (!Number.isInteger(options.year)) {
+      console.log(`ℹ️  --year가 지정되지 않아 현재 연도(${year})를 사용합니다.`);
+    }
 
     console.log('\n📄 MossDigest Report Generation\n');
     console.log(`📊 Type: ${type}`);

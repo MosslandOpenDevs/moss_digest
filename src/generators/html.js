@@ -17,13 +17,16 @@ const __dirname = path.dirname(__filename);
  * @param {number} year - 연도
  * @returns {Array} - 월별 커밋 수 배열 (1-12월)
  */
-function generateMonthlyCommitTrend(data, year) {
+export function generateMonthlyCommitTrend(data, year) {
   const monthlyCommits = new Array(12).fill(0);
+  // 이중 집계 방지: repositories에서 집계한 저장소는 organizations에서 다시 세지 않는다.
+  const counted = new Set();
 
   // 저장소 커밋 집계 (repositories)
   if (data.repositories) {
-    Object.values(data.repositories).forEach(repo => {
-      if (repo.commits) {
+    Object.entries(data.repositories).forEach(([repoName, repo]) => {
+      if (repo.commits && repo.commits.length > 0) {
+        counted.add(repoName);
         repo.commits.forEach(commit => {
           const commitDate = new Date(commit.date);
           if (commitDate.getFullYear() === year) {
@@ -40,6 +43,7 @@ function generateMonthlyCommitTrend(data, year) {
     Object.values(data.organizations).forEach(org => {
       if (org.repositoryActivities) {
         org.repositoryActivities.forEach(activity => {
+          if (counted.has(activity.fullName)) return;
           if (Array.isArray(activity.commits)) {
             activity.commits.forEach(commit => {
               const commitDate = new Date(commit.date);
@@ -69,11 +73,14 @@ function generateWeeklyCommitTrend(data, startDate, endDate) {
   const timeDiff = endDate - startDate;
   const weekCount = Math.ceil(timeDiff / (7 * 24 * 60 * 60 * 1000));
   const weeklyCommits = new Array(weekCount).fill(0);
+  // 이중 집계 방지: repositories에서 집계한 저장소는 organizations에서 다시 세지 않는다.
+  const counted = new Set();
 
   // 저장소 커밋 집계 (repositories)
   if (data.repositories) {
-    Object.values(data.repositories).forEach(repo => {
-      if (repo.commits) {
+    Object.entries(data.repositories).forEach(([repoName, repo]) => {
+      if (repo.commits && repo.commits.length > 0) {
+        counted.add(repoName);
         repo.commits.forEach(commit => {
           const commitDate = new Date(commit.date);
           if (commitDate >= startDate && commitDate <= endDate) {
@@ -93,6 +100,7 @@ function generateWeeklyCommitTrend(data, startDate, endDate) {
     Object.values(data.organizations).forEach(org => {
       if (org.repositoryActivities) {
         org.repositoryActivities.forEach(activity => {
+          if (counted.has(activity.fullName)) return;
           if (Array.isArray(activity.commits)) {
             activity.commits.forEach(commit => {
               const commitDate = new Date(commit.date);
@@ -273,7 +281,7 @@ function formatPeriod(year, month, quarter) {
  * @param {Object} data - 수집된 데이터
  * @returns {Object}
  */
-function calculateMetrics(data) {
+export function calculateMetrics(data) {
   const metrics = {
     totalBlogPosts: 0,
     totalCommits: 0,
@@ -295,11 +303,14 @@ function calculateMetrics(data) {
     });
   }
 
-  // 커밋 수
+  // 커밋 수 (명시적 repositories 소스)
+  // 조직 집계와의 이중 계산을 막기 위해, 실제로 커밋을 집계한 저장소 이름을 기록해 둔다.
+  const countedRepoNames = new Set();
   if (data.repositories) {
-    Object.values(data.repositories).forEach(repo => {
-      if (repo.commits) {
+    Object.entries(data.repositories).forEach(([repoName, repo]) => {
+      if (repo.commits && repo.commits.length > 0) {
         metrics.totalCommits += repo.commits.length;
+        countedRepoNames.add(repoName);
       }
     });
   }
@@ -315,8 +326,11 @@ function calculateMetrics(data) {
       // 커밋 및 릴리즈
       if (org.repositoryActivities) {
         org.repositoryActivities.forEach(activity => {
-          // commits는 이제 배열 형태
-          metrics.totalCommits += (Array.isArray(activity.commits) ? activity.commits.length : (activity.commits || 0));
+          // 명시적 repositories 소스에서 이미 집계한 저장소는 제외 (이중 계산 방지)
+          if (!countedRepoNames.has(activity.fullName)) {
+            // commits는 이제 배열 형태
+            metrics.totalCommits += (Array.isArray(activity.commits) ? activity.commits.length : (activity.commits || 0));
+          }
           metrics.totalReleases += activity.releases?.length || 0;
         });
       }
@@ -383,7 +397,7 @@ function extractBlogPosts(data) {
  * @param {Object} data - 수집된 데이터
  * @returns {Array}
  */
-function extractRepositories(data) {
+export function extractRepositories(data) {
   const repositories = [];
 
   // 조직 활동
@@ -395,6 +409,9 @@ function extractRepositories(data) {
             name: activity.name,
             fullName: activity.fullName,
             url: activity.url,
+            description: activity.description || null,
+            language: activity.language || null,
+            stars: activity.stars || 0,
             commits: Array.isArray(activity.commits) ? activity.commits.length : (activity.commits || 0),
             releases: activity.releases?.length || 0,
             isNew: false
@@ -409,7 +426,8 @@ function extractRepositories(data) {
     Object.entries(data.repositories).forEach(([repoName, repo]) => {
       const existing = repositories.find(r => r.fullName === repoName);
       if (existing) {
-        existing.commits += repo.commits?.length || 0;
+        // 조직 활동에도 존재하는 저장소는 동일 커밋을 중복 합산하지 않도록 큰 값으로 통일
+        existing.commits = Math.max(existing.commits, repo.commits?.length || 0);
       } else if (repo.commits && repo.commits.length > 0) {
         repositories.push({
           name: repoName.split('/')[1],

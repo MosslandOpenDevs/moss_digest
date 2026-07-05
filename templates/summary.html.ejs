@@ -619,7 +619,8 @@
   <!-- Commit Trend -->
   <section class="section">
     <div class="section-label" data-num="01">통계</div>
-    <h2><%= commitTrendTitle.split(' ')[0] %> <em><%= commitTrendTitle.split(' ')[1] %></em></h2>
+    <% const _titleParts = commitTrendTitle.split(' '); %>
+    <h2><%= _titleParts[0] %> <em><%= _titleParts.slice(1).join(' ') %></em></h2>
     <p class="section-desc"><%= reportType === 'annual' ? '연간' : reportType === 'quarterly' ? '분기별' : '월간' %> 개발 활동의 흐름을 한눈에 확인할 수 있습니다.</p>
 
     <div class="chart-container">

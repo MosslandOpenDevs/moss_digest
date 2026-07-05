@@ -295,7 +295,6 @@ function generateIndexHtml(reports) {
         </div>
         <div class="report-links">
           <a href="../${report.path}/summary.html" class="btn btn-primary" target="_blank">📄 Summary</a>
-          <a href="../${report.path}/detail.pdf" class="btn btn-secondary" target="_blank">📕 Detail PDF</a>
         </div>
       </li>
       `).join('')}

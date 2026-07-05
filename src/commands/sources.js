@@ -92,7 +92,9 @@ export async function validateSources() {
                 required: ['name', 'url', 'enabled'],
                 properties: {
                   name: { type: 'string' },
-                  url: { type: 'string', format: 'uri' },
+                  // format: 'uri'는 Ajv v8 기본 빌드에 포함되지 않아(ajv-formats 필요)
+                  // strict 모드에서 컴파일 에러를 유발하므로 패턴으로 검증한다.
+                  url: { type: 'string', pattern: '^https?://' },
                   enabled: { type: 'boolean' }
                 }
               }

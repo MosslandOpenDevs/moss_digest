@@ -5,7 +5,7 @@
 
 import Parser from 'rss-parser';
 import { isDateInRange } from '../utils/date-filter.js';
-import { summarizeBatch, isGeminiAvailable } from '../utils/summarizer.js';
+import { summarizeBatch, isLLMAvailable } from '../utils/summarizer.js';
 
 const parser = new Parser();
 
@@ -40,7 +40,7 @@ export async function collectMediumPosts(feedUrl, startDate, endDate, summarize 
     console.log(`Found ${filteredPosts.length} posts in date range`);
 
     // AI 요약 생성
-    if (summarize && isGeminiAvailable() && filteredPosts.length > 0) {
+    if (summarize && isLLMAvailable() && filteredPosts.length > 0) {
       console.log('\n🤖 Medium 블로그 AI 요약 생성 시작...');
       const documentsToSummarize = filteredPosts.map(post => ({
         url: post.link,

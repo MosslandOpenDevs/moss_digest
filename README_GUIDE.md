@@ -45,12 +45,14 @@ npm --version    # v8.0.0 이상
 npm install
 ```
 
-설치되는 패키지:
+설치되는 주요 패키지:
 - `rss-parser` - Medium RSS 파싱
 - `@octokit/rest` - GitHub API 접근
 - `commander` - CLI 인터페이스
 - `ejs` - HTML 템플릿
-- `puppeteer` - PDF 생성
+- `openai` - LM Studio(OpenAI 호환) AI 요약
+- `pdf-parse` - PDF 텍스트 추출
+- `puppeteer` - PDF 생성 (현재 비활성화, 향후 사용 대비)
 - `node-cron` - 스케줄링
 - `dotenv` - 환경변수 관리
 - `ajv` - 설정 파일 검증
@@ -75,14 +77,24 @@ npm install
 
 ### 2. 환경변수 파일 설정
 
-`config/.env` 파일을 열고 GitHub 토큰을 입력합니다:
+먼저 예제 파일을 복사한 뒤 값을 채웁니다:
+
+```bash
+cp config/.env.example config/.env
+```
+
+최소한 GitHub 토큰만 있으면 데이터 수집이 동작합니다:
 
 ```env
 # 필수: GitHub API 토큰
 GITHUB_TOKEN=ghp_여기에_복사한_토큰_붙여넣기
 
-# 선택: Google Gemini API (공시 자료 AI 요약)
-GEMINI_API_KEY=여기에_Gemini_API_키_붙여넣기
+# AI 요약 제공자 (기본: lmstudio)
+LLM_PROVIDER=lmstudio
+
+# LM Studio 로컬 서버 설정 (LLM_PROVIDER=lmstudio 인 경우)
+LMSTUDIO_URL=http://localhost:8899/v1
+LMSTUDIO_MODEL=qwen2.5-32b-instruct
 
 # 선택 (비워두셔도 됩니다)
 GITHUB_APP_ID=
@@ -91,19 +103,11 @@ SLACK_WEBHOOK_URL=
 DISCORD_WEBHOOK_URL=
 ```
 
-**Google Gemini API 키 발급 (선택사항):**
+**AI 요약 (선택사항):**
 
-공시 문서 자동 요약 기능을 사용하려면 Gemini API 키가 필요합니다:
-
-1. [Google AI Studio](https://makersuite.google.com/app/apikey) 접속
-2. **Get API key** 또는 **Create API key** 클릭
-3. 생성된 API 키 복사
-4. `config/.env` 파일의 `GEMINI_API_KEY`에 붙여넣기
-
-**참고:**
-- Gemini API는 **무료**로 사용 가능 (하루 1,500 요청)
-- API 키가 없으면 요약 기능은 자동으로 비활성화됩니다
-- 링크 수집은 정상적으로 작동하며, 요약만 생략됩니다
+- 기본 요약 제공자는 **LM Studio(로컬 LLM)** 입니다. 설정 방법은 아래 [AI 요약 기능](#-ai-요약-기능)을 참고하세요.
+- LM Studio 서버가 실행 중이 아니면 **요약만 자동으로 생략**되며, 데이터 수집과 보고서 생성은 정상 동작합니다.
+- Google Gemini(클라우드)는 현재 코드에서 비활성화되어 있습니다.
 
 ### 3. 설정 확인
 
@@ -150,18 +154,26 @@ npx mossdigest build-web
 
 ## 🤖 AI 요약 기능
 
-MossDigest는 Google Gemini AI를 사용하여 공시 문서를 자동으로 요약합니다.
+MossDigest는 로컬 LLM(LM Studio, OpenAI 호환 API)을 사용하여 Medium 글과 공시 문서를 자동으로 요약합니다.
+
+### 사전 준비 (LM Studio)
+
+1. [LM Studio](https://lmstudio.ai/) 설치 후 모델 다운로드 (예: `qwen2.5-32b-instruct`)
+2. LM Studio에서 **Start Server** 클릭 (기본 포트 `8899`)
+3. `config/.env`에서 `LLM_PROVIDER=lmstudio`, `LMSTUDIO_URL`, `LMSTUDIO_MODEL` 설정
+
+> 로컬 서버 튜닝(지연/처리량, 컨텍스트 길이, GPU 오프로딩) 노트는 [local-llm-summarization-tuning-report.md](./local-llm-summarization-tuning-report.md)를 참고하세요.
 
 ### 작동 방식
 
-1. **자동 감지**: README.md에서 외부 링크를 발견하면 자동으로 요약 시도
+1. **자동 감지**: 수집 대상(Medium 글, README의 외부 링크)을 발견하면 요약 시도
 2. **콘텐츠 추출**: PDF 또는 HTML 문서에서 텍스트 자동 추출
-3. **AI 요약**: Gemini API를 통해 3-5줄로 핵심 내용 요약
+3. **AI 요약**: 로컬 LLM으로 3-5줄로 핵심 내용 요약 (한/영 언어 자동 감지)
 4. **보고서 표시**: HTML 보고서에 요약 내용 자동 추가
 
 ### 요약 예시
 
-보고서에서 각 공시 문서 아래에 다음과 같이 표시됩니다:
+보고서에서 각 문서 아래에 다음과 같이 표시됩니다:
 
 ```
 📄 2025년 1분기 실적 발표
@@ -170,16 +182,15 @@ MossDigest는 Google Gemini AI를 사용하여 공시 문서를 자동으로 요
    🤖 AI 요약:
    2025년 1분기 매출은 전년 대비 15% 증가한 120억원을 기록했으며,
    신규 메타버스 플랫폼 출시로 MAU가 50만명을 돌파했습니다.
-   주요 성장 동력은 NFT 거래량 증가와 기업 파트너십 확대입니다.
 ```
 
-### 비활성화 방법
+### 요약 없이 실행 / 파라미터 조정
 
-AI 요약을 사용하지 않으려면:
-
-1. `config/.env`에서 `GEMINI_API_KEY`를 비워두거나 삭제
-2. 데이터 수집 시 자동으로 요약이 건너뛰어짐
-3. 링크 수집은 정상 작동
+- LM Studio 서버를 실행하지 않으면 요약이 자동으로 생략되고, 수집·보고서 생성은 정상 동작합니다.
+- 요약 동작은 `config/.env`의 다음 값으로 조정할 수 있습니다:
+  - `LMSTUDIO_TEMPERATURE` (기본 0.3), `LMSTUDIO_MAX_TOKENS` (기본 500)
+  - `LMSTUDIO_MAX_CONTEXT_LENGTH` (기본 8000자 — 초과분은 앞부분만 사용)
+  - `LMSTUDIO_TIMEOUT` (기본 300000ms)
 
 ### 지원 형식
 
@@ -187,11 +198,9 @@ AI 요약을 사용하지 않으려면:
 - **HTML 페이지**: 태그 제거 후 본문 추출 및 요약
 - **텍스트 문서**: 직접 요약
 
-### 비용 및 제한
+### 참고: Google Gemini
 
-- **무료 사용**: 하루 1,500 요청까지 무료
-- **속도 제한**: 요청 간 2초 간격 (API 보호)
-- **문서 길이**: 최대 25,000자까지 처리
+Gemini(클라우드) 제공자는 현재 코드에서 비활성화되어 있습니다. 사용하려면 `npm install @google/generative-ai` 후 `src/utils/summarizer.js`의 Gemini 섹션 주석을 해제하세요.
 
 ---
 
@@ -285,7 +294,6 @@ npx mossdigest generate --type monthly --year 2025 --month 1
 
 **생성되는 파일:**
 - `reports/2025/monthly/01/summary.html` - 요약 보고서 (HTML)
-- `reports/2025/monthly/01/detail.pdf` - 상세 보고서 (PDF)
 
 #### 분기 보고서 생성
 ```bash
@@ -294,7 +302,6 @@ npx mossdigest generate --type quarterly --year 2025 --quarter 1
 
 **생성되는 파일:**
 - `reports/2025/quarterly/Q1/summary.html`
-- `reports/2025/quarterly/Q1/detail.pdf`
 
 #### 연간 보고서 생성
 ```bash
@@ -303,7 +310,8 @@ npx mossdigest generate --type annual --year 2024
 
 **생성되는 파일:**
 - `reports/2024/annual/summary.html`
-- `reports/2024/annual/detail.pdf`
+
+> **참고**: 상세 PDF(`detail.pdf`) 생성은 현재 비활성화되어 있어 요약 HTML만 생성됩니다.
 
 ---
 
@@ -377,11 +385,10 @@ npx mossdigest run --type monthly --year 2025 --month 1
 1. 2025년 1월 1일 ~ 31일 데이터 수집
 2. Medium 블로그 글 수집
 3. GitHub 커밋 및 활동 수집
-4. 요약 HTML + 상세 PDF 생성
+4. 요약 HTML 생성
 
 **결과 확인:**
 - `reports/2025/monthly/01/summary.html` - 브라우저로 열기
-- `reports/2025/monthly/01/detail.pdf` - PDF 뷰어로 열기
 
 ---
 
@@ -450,18 +457,15 @@ MossDigest/
 │   └── 2025/
 │       ├── monthly/
 │       │   ├── 01/
-│       │   │   ├── summary.html    # 요약 보고서 (HTML)
-│       │   │   └── detail.pdf      # 상세 보고서 (PDF)
+│       │   │   └── summary.html    # 요약 보고서 (HTML)
 │       │   ├── 02/
 │       │   └── ...
 │       ├── quarterly/
 │       │   ├── Q1/
-│       │   │   ├── summary.html
-│       │   │   └── detail.pdf
+│       │   │   └── summary.html
 │       │   └── ...
 │       └── annual/
-│           ├── summary.html
-│           └── detail.pdf
+│           └── summary.html
 │
 └── web/
     └── index.html             # 엔트리 페이지 (모든 보고서 목록)
@@ -515,24 +519,19 @@ curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/rate_limit
 
 ---
 
-### 문제 4: Puppeteer 실행 오류
+### 문제 4: AI 요약이 생성되지 않음
 
-**증상:** PDF 생성 중 오류
+**증상:** 보고서에 `🤖 AI 요약`이 표시되지 않음
 
-**원인:** Chromium 다운로드 실패 또는 실행 권한 문제
+**원인:** LM Studio 서버가 실행 중이 아니거나 `config/.env`의 LM Studio 설정이 올바르지 않음
 
 **해결:**
-```bash
-# Puppeteer 재설치
-npm uninstall puppeteer
-npm install puppeteer
-```
+1. LM Studio에서 **Start Server**가 눌려 있는지 확인 (기본 포트 `8899`)
+2. `config/.env`의 `LMSTUDIO_URL`, `LMSTUDIO_MODEL`이 실제 서버/모델과 일치하는지 확인
+3. 원격 서버 사용 시 `LMSTUDIO_TIMEOUT`을 넉넉히 설정 (예: 600000)
 
-Windows에서는 추가 설정이 필요할 수 있습니다:
-```bash
-# 관리자 권한으로 실행
-npm install puppeteer --unsafe-perm=true
-```
+> 참고: LLM 요약은 선택 기능이므로, 서버가 없어도 수집과 보고서 생성은 정상 동작하며 요약만 생략됩니다.
+> PDF(Puppeteer) 생성은 현재 비활성화되어 있어 관련 오류는 발생하지 않습니다.
 
 ---
 

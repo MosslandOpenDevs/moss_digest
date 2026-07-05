@@ -121,9 +121,12 @@ schedulerCmd
 
 schedulerCmd
   .command('stop')
-  .description('Stop scheduler')
+  .description('How to stop a running scheduler')
   .action(() => {
-    console.log('Scheduler stopped');
+    // 스케줄러는 포그라운드 프로세스로 실행되므로 별도 프로세스에서 중지할 수 없다.
+    console.log('The scheduler runs in the foreground.');
+    console.log('To stop it, press Ctrl+C in the terminal where `scheduler start` is running');
+    console.log('(or terminate that process, e.g. `kill <pid>`).');
     process.exit(0);
   });
 

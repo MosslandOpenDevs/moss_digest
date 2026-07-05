@@ -23,7 +23,13 @@ const SOURCES_PATH = path.join(__dirname, '../../config/sources.json');
  */
 export async function collectData(options) {
   try {
-    const { year, month, quarter, verbose } = options;
+    const { month, quarter, verbose } = options;
+
+    // 연도 미지정 시 현재 연도로 기본 설정 (undefined 전달 시 Invalid Date 방지)
+    const year = Number.isInteger(options.year) ? options.year : new Date().getFullYear();
+    if (!Number.isInteger(options.year)) {
+      console.log(`ℹ️  --year가 지정되지 않아 현재 연도(${year})를 사용합니다.`);
+    }
 
     // 날짜 범위 결정
     let reportType, period;

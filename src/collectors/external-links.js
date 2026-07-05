@@ -4,7 +4,7 @@
  */
 
 import { isDateInRange } from '../utils/date-filter.js';
-import { summarizeBatch, isGeminiAvailable } from '../utils/summarizer.js';
+import { summarizeBatch, isLLMAvailable } from '../utils/summarizer.js';
 
 /**
  * README 내용에서 날짜 + 링크 패턴 파싱
@@ -184,7 +184,7 @@ export async function fetchLinkContent(url) {
  * @param {Date} startDate - 시작 날짜
  * @param {Date} endDate - 종료 날짜
  * @param {boolean} fetchContent - 링크 콘텐츠를 가져올지 여부
- * @param {boolean} summarize - AI 요약 생성 여부 (Gemini API 필요)
+ * @param {boolean} summarize - AI 요약 생성 여부 (LLM 사용 가능 시에만 동작, 기본 LM Studio)
  * @returns {Promise<Array>} - 수집된 링크 데이터
  */
 export async function collectExternalLinks(readmeContent, startDate, endDate, fetchContent = true, summarize = true) {
@@ -216,7 +216,7 @@ export async function collectExternalLinks(readmeContent, startDate, endDate, fe
     }
 
     // 4. AI 요약 생성 (선택적)
-    if (summarize && isGeminiAvailable() && results.length > 0) {
+    if (summarize && isLLMAvailable() && results.length > 0) {
       console.log('\n🤖 AI 요약 생성 시작...');
       const documentsToSummarize = results.map(link => ({
         url: link.url,
@@ -225,9 +225,9 @@ export async function collectExternalLinks(readmeContent, startDate, endDate, fe
 
       const summaries = await summarizeBatch(documentsToSummarize, 2000);
 
-      // 요약을 결과에 추가
+      // 요약을 결과에 추가 (반환 길이가 다를 수 있으므로 안전하게 접근)
       for (let i = 0; i < results.length; i++) {
-        results[i].summary = summaries[i].summary;
+        results[i].summary = summaries[i]?.summary ?? null;
       }
     }
 

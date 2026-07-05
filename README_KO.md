@@ -29,7 +29,7 @@ MossDigest는 Medium 블로그, GitHub 저장소, 공시 문서 등 다양한 �
 | mossland-blog | `https://medium.com/feed/mossland-blog` | 제목, 발행일, 링크, 요약, **AI 요약** |
 
 > **참고**: `@mosscoin`과 `mossland-blog`는 같은 퍼블리케이션을 가리키므로, 중복을 피하기 위해 `mossland-blog`만 사용합니다.
-> **AI 요약**: LM Studio (로컬 LLM) 또는 Google Gemini API를 사용하여 자동으로 간결한 요약을 생성합니다
+> **AI 요약**: LM Studio(로컬 LLM)로 자동 요약을 생성합니다. Google Gemini도 지원하지만 기본 비활성화입니다(아래 AI 요약 설정 참고).
 
 ### GitHub 저장소
 
@@ -57,7 +57,7 @@ MossDigest는 Medium 블로그, GitHub 저장소, 공시 문서 등 다양한 �
 **기능:**
 - 공시 링크에서 자동으로 콘텐츠 가져오기
 - **공시 문서(PDF, HTML)의 AI 기반 요약 생성**
-- 로컬 LLM(LM Studio)과 클라우드 API(Google Gemini) 지원
+- 로컬 LLM(LM Studio) 요약 지원; 클라우드(Google Gemini)는 선택이며 기본 비활성화
 
 ---
 
@@ -83,21 +83,27 @@ MossDigest/
 │   │   └── summarizer.js   # AI 요약 (LM Studio + Gemini)
 │   ├── commands/
 │   │   ├── collect.js
-│   │   └── generate.js
+│   │   ├── generate.js
+│   │   ├── run.js
+│   │   ├── build-web.js
+│   │   ├── scheduler.js
+│   │   └── sources.js
 │   └── index.js
 ├── templates/              # 보고서 템플릿
 │   ├── summary.html.ejs
 │   └── detail.html.ejs
-├── data/                   # 수집된 원본 데이터
+├── test/                   # 단위 테스트 (node:test, 추가 의존성 없음)
+├── data/                   # 수집된 원본 데이터 (git-ignore)
 │   └── {year}/
-│       ├── raw/
-│       └── processed/
-├── reports/                # 생성된 보고서
+│       ├── monthly/        # {year}-{MM}.json
+│       ├── quarterly/      # {year}-Q{n}.json
+│       └── annual/         # {year}.json
+├── reports/                # 생성된 보고서 (git-ignore)
 │   └── {year}/
-│       ├── monthly/
-│       ├── quarterly/
-│       └── annual/
-├── web/                    # 엔트리포인트 페이지
+│       ├── monthly/{MM}/summary.html
+│       ├── quarterly/Q{n}/summary.html
+│       └── annual/summary.html
+├── web/                    # 엔트리포인트 페이지 (git-ignore)
 │   └── index.html
 ├── package.json
 └── README.md
@@ -232,8 +238,8 @@ DISCORD_WEBHOOK_URL=
 │                            ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │                      Data Store                             ││
-│  │                  data/{year}/raw/                           ││
-│  │                  data/{year}/processed/                     ││
+│  │          data/{year}/monthly | quarterly | annual/          ││
+│  │                 (collected JSON per period)                 ││
 │  └─────────────────────────┬───────────────────────────────────┘│
 │                            ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐│
@@ -245,7 +251,7 @@ DISCORD_WEBHOOK_URL=
 │          ▼                                   ▼                  │
 │  ┌───────────────┐                   ┌───────────────┐          │
 │  │ summary.html  │                   │  detail.pdf   │          │
-│  │  (요약 보고서)  │                   │ (상세 보고서)  │          │
+│  │  (요약 보고서)  │                   │  (비활성화)   │          │
 │  └───────────────┘                   └───────────────┘          │
 │                            │                                    │
 │                            ▼                                    │
@@ -290,10 +296,9 @@ DISCORD_WEBHOOK_URL=
 
 ### 엔트리포인트 페이지 (web/index.html)
 
-- 연도별/월별 보고서 네비게이션
-- 최신 보고서 바로가기
-- 검색/필터 기능
-- 다운로드 링크 (HTML, PDF)
+- 생성된 모든 보고서를 연도/기간별로 정렬하여 목록 표시 (최신순)
+- 각 보고서의 요약(HTML) 바로가기
+- 보고서 생성 후 `mossdigest build-web`으로 다시 빌드
 
 ---
 
@@ -310,7 +315,7 @@ DISCORD_WEBHOOK_URL=
 | 스케줄링 | `node-cron` |
 | CLI 인터페이스 | `commander` |
 | **AI 요약 (로컬)** | **`openai` (LM Studio 호환)** |
-| **AI 요약 (클라우드)** | **`@google/generative-ai` (Gemini)** |
+| **AI 요약 (클라우드, 선택)** | **`@google/generative-ai` (Gemini — 기본 미설치, 아래 참고)** |
 | **PDF 텍스트 추출** | **`pdf-parse`** |
 | **차트 & 시각화** | **Chart.js (CDN)** |
 
@@ -334,17 +339,20 @@ MossDigest는 자동 콘텐츠 요약을 위해 두 가지 LLM 제공자를 지�
    LMSTUDIO_MODEL=qwen2.5-32b-instruct
    ```
 
-### 방법 2: Google Gemini API
+> **팁**: 로컬 Qwen2.5-32B 서버의 지연/처리량 튜닝(컨텍스트 길이, GPU 오프로딩) 노트는 [local-llm-summarization-tuning-report.md](./local-llm-summarization-tuning-report.md)를 참고하세요.
 
-1. **API 키 발급** [Google AI Studio](https://makersuite.google.com/app/apikey)에서 생성
-2. **.env 설정**
+### 방법 2: Google Gemini API (기본 비활성화)
+
+1. **SDK 설치**: `npm install @google/generative-ai` (기본 의존성에서 제외됨)
+2. **주석 해제**: `src/utils/summarizer.js`의 Gemini 관련 코드 섹션 주석을 해제
+3. **API 키 발급**: [Google AI Studio](https://makersuite.google.com/app/apikey)에서 생성
+4. **.env 설정**
    ```env
    LLM_PROVIDER=gemini
    GEMINI_API_KEY=your_api_key_here
    ```
 
-> **참고**: Gemini 코드는 현재 `src/utils/summarizer.js`에서 주석 처리되어 있습니다.
-> Gemini를 사용하려면 해당 코드 섹션의 주석을 해제하세요.
+> **참고**: Gemini 구현은 현재 `src/utils/summarizer.js`에서 주석 처리되어 있어, 기본 상태에서 동작하는 제공자는 LM Studio뿐입니다. 위 단계를 완료하지 않고 `LLM_PROVIDER=gemini`로 설정하면 AI 요약이 비활성화됩니다(수집은 계속 진행되며 요약만 생략됨).
 
 ---
 
@@ -352,17 +360,13 @@ MossDigest는 자동 콘텐츠 요약을 위해 두 가지 LLM 제공자를 지�
 
 ### 데이터 소스 관리
 
+데이터 소스는 `config/sources.json` 파일을 직접 편집하여 설정합니다.
+
 ```bash
 # 설정된 소스 목록 확인
 npx mossdigest sources list
 
-# 새 저장소 추가
-npx mossdigest sources add-repo
-
-# 새 조직 추가
-npx mossdigest sources add-org
-
-# 설정 파일 검증
+# config/sources.json을 스키마에 대해 검증
 npx mossdigest sources validate
 ```
 
@@ -515,10 +519,10 @@ npx mossdigest scheduler start
 | **Phase 2.6** | **GitHub 활동 통계 (PR, Issue, Contributors)** | ✅ **완료** |
 | **Phase 3** | 보고서 생성 (다크 모드 HTML) | ✅ **완료** |
 | **Phase 3.5** | **동적 커밋 트렌드 그래프** | ✅ **완료** |
-| **Phase 4** | 분기/연간 보고서 (월간 데이터 집계) | 🟡 진행 중 |
-| **Phase 5** | 엔트리포인트 페이지 | 🟡 예정 |
-| **Phase 6** | CLI 완성 | 🟡 진행 중 |
-| **Phase 7** | 자동 스케줄링 | 🔴 예정 |
+| **Phase 4** | 분기/연간 보고서 (월간 데이터 집계) | ✅ **완료** |
+| **Phase 5** | 엔트리포인트 페이지 (`build-web`) | ✅ **완료** |
+| **Phase 6** | CLI (collect / generate / run / sources / build-web / scheduler) | ✅ **완료** |
+| **Phase 7** | 자동 스케줄링 (`scheduler start`) | ✅ **완료** |
 | **Phase 8** | PDF 보고서 생성 (재활성화) | 🔴 선택사항 |
 
 ---

@@ -131,21 +131,20 @@ export async function collectChangedFiles(token, owner, repo, sha, filePatterns 
  * @param {string} token - GitHub token
  * @param {string} owner - 저장소 소유자
  * @param {string} repo - 저장소 이름
- * @param {string} [branch='main'] - 브랜치 이름
+ * @param {string} [branch] - 브랜치 이름 (미지정 시 저장소 기본 브랜치 사용)
  * @returns {Promise<string>} - README.md 내용
  */
-export async function fetchReadme(token, owner, repo, branch = 'main') {
+export async function fetchReadme(token, owner, repo, branch) {
   const octokit = createOctokit(token);
 
   try {
     console.log(`Fetching README.md from ${owner}/${repo}`);
 
-    const response = await octokit.rest.repos.getContent({
-      owner,
-      repo,
-      path: 'README.md',
-      ref: branch
-    });
+    // ref를 지정하지 않으면 저장소의 기본 브랜치(main/master 등)를 사용한다.
+    const params = { owner, repo, path: 'README.md' };
+    if (branch) params.ref = branch;
+
+    const response = await octokit.rest.repos.getContent(params);
 
     // Base64 디코딩
     const content = Buffer.from(response.data.content, 'base64').toString('utf-8');

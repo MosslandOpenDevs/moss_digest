@@ -226,13 +226,33 @@ export async function collectReleases(token, owner, repo, startDate, endDate) {
   const octokit = createOctokit(token);
 
   try {
-    const response = await octokit.rest.repos.listReleases({
-      owner,
-      repo,
-      per_page: 100
-    });
+    // 릴리즈가 100개를 초과하는 저장소에서도 누락이 없도록 페이지네이션 처리
+    // (listReleases는 created_at 내림차순이므로 페이지의 가장 오래된 항목이
+    //  시작일 이전이면 조기 종료)
+    const allReleases = [];
+    let page = 1;
+    const perPage = 100;
 
-    return response.data
+    while (true) {
+      const response = await octokit.rest.repos.listReleases({
+        owner,
+        repo,
+        per_page: perPage,
+        page
+      });
+
+      if (response.data.length === 0) break;
+      allReleases.push(...response.data);
+
+      const oldest = response.data[response.data.length - 1];
+      if (oldest.created_at && new Date(oldest.created_at) < startDate) break;
+
+      if (response.data.length < perPage) break;
+      page++;
+      await sleep(100);
+    }
+
+    return allReleases
       .filter(release => {
         const publishedAt = new Date(release.published_at);
         return isDateInRange(publishedAt, startDate, endDate);
@@ -428,7 +448,10 @@ export async function collectOrganizationData(config, token, startDate, endDate)
           name: repo.name,
           fullName: repo.full_name,
           url: repo.html_url,
-          commits: 0,
+          description: repo.description || null,
+          language: repo.language || null,
+          stars: repo.stargazers_count || 0,
+          commits: [],
           releases: [],
           pullRequests: { total: 0, merged: 0, closed: 0, open: 0 },
           issues: { total: 0, closed: 0, open: 0 }
@@ -438,7 +461,7 @@ export async function collectOrganizationData(config, token, startDate, endDate)
         if (trackCommits) {
           console.log(`  [DEBUG] Counting commits for ${repo.name}...`);
           activity.commits = await countCommits(token, name, repo.name, startDate, endDate);
-          console.log(`  [DEBUG] ${repo.name}: ${activity.commits} commits`);
+          console.log(`  [DEBUG] ${repo.name}: ${activity.commits.length} commits`);
         }
 
         // 릴리즈 수집
@@ -469,7 +492,9 @@ export async function collectOrganizationData(config, token, startDate, endDate)
         result.totalIssues.open += activity.issues.open;
 
         // 활동이 있는 저장소만 추가
-        if (activity.commits > 0 || activity.releases.length > 0 ||
+        // 주의: activity.commits는 배열이므로 반드시 .length로 비교해야 함
+        // (배열을 숫자와 직접 비교하면 항상 false가 되어 커밋만 있는 저장소가 누락됨)
+        if (activity.commits.length > 0 || activity.releases.length > 0 ||
             activity.pullRequests.total > 0 || activity.issues.total > 0) {
           result.repositoryActivities.push(activity);
         }
@@ -483,13 +508,14 @@ export async function collectOrganizationData(config, token, startDate, endDate)
       }
     }
 
-    // 4. 기여자 수집 (전체 저장소에서)
-    console.log(`\n[INFO] Collecting contributors...`);
-    for (const repo of allRepos) {
+    // 4. 기여자 수집 (해당 기간에 활동이 있었던 저장소에서만)
+    //    - 전체 저장소를 도는 대신 활동 저장소만 조회하여 API 호출/rate limit을 절감
+    console.log(`\n[INFO] Collecting contributors from ${result.repositoryActivities.length} active repositories...`);
+    for (const activity of result.repositoryActivities) {
       try {
         const response = await octokit.rest.repos.listContributors({
           owner: name,
-          repo: repo.name,
+          repo: activity.name,
           per_page: 100
         });
 

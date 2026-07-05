@@ -10,7 +10,11 @@ const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 
 // LLM Provider 설정
-const LLM_PROVIDER = process.env.LLM_PROVIDER || 'lmstudio'; // 'gemini' 또는 'lmstudio'
+// 주의: 모듈 로드 시점이 아니라 호출 시점에 환경변수를 읽는다.
+// (dotenv.config() 실행 순서에 의존하지 않도록 하기 위함)
+function getProvider() {
+  return process.env.LLM_PROVIDER || 'lmstudio'; // 'gemini' 또는 'lmstudio'
+}
 
 // =============================================================================
 // LM Studio (OpenAI Compatible API)
@@ -292,15 +296,17 @@ let isInitialized = false;
  * LLM 초기화 (환경변수 기반)
  */
 export async function initializeLLM() {
-  if (LLM_PROVIDER === 'lmstudio') {
+  const provider = getProvider();
+  if (provider === 'lmstudio') {
     isInitialized = await initializeLMStudio();
-  } else if (LLM_PROVIDER === 'gemini') {
-    // const apiKey = process.env.GEMINI_API_KEY;
-    // isInitialized = initializeGemini(apiKey);
-    console.log('⚠️  Gemini API는 현재 주석처리되어 있습니다. LLM_PROVIDER=lmstudio를 사용하세요.');
+  } else if (provider === 'gemini') {
+    // Gemini 구현은 현재 주석처리되어 있음(파일 하단 참조).
+    // 활성화하려면 @google/generative-ai 설치 후 해당 코드의 주석을 해제한다.
+    console.warn('⚠️  Gemini provider는 현재 비활성화되어 있습니다. LLM_PROVIDER=lmstudio를 사용하세요.');
+    console.warn('   AI 요약 없이 계속 진행합니다.');
     isInitialized = false;
   } else {
-    console.error(`✗ 알 수 없는 LLM_PROVIDER: ${LLM_PROVIDER}`);
+    console.error(`✗ 알 수 없는 LLM_PROVIDER: ${provider} (사용 가능: 'lmstudio', 'gemini')`);
     isInitialized = false;
   }
 
@@ -308,32 +314,29 @@ export async function initializeLLM() {
 }
 
 /**
- * Gemini API 초기화 (호환성 유지)
- * @deprecated Use initializeLLM() instead
+ * LLM(요약 기능) 사용 가능 여부 확인
  */
-export async function initializeGemini(apiKey) {
-  console.log('⚠️  initializeGemini()는 deprecated되었습니다. initializeLLM()을 사용하세요.');
-  return await initializeLLM();
+export function isLLMAvailable() {
+  return isInitialized;
 }
 
 /**
- * LLM 사용 가능 여부 확인
+ * @deprecated isLLMAvailable()을 사용하세요. (레거시 이름 호환용 별칭)
  */
-export function isGeminiAvailable() {
-  return isInitialized;
-}
+export const isGeminiAvailable = isLLMAvailable;
 
 /**
  * 텍스트 요약 (LLM Provider에 따라 자동 선택)
  */
 async function summarizeText(text, title = '') {
-  if (LLM_PROVIDER === 'lmstudio') {
+  const provider = getProvider();
+  if (provider === 'lmstudio') {
     return await summarizeWithLMStudio(text, title);
-  } else if (LLM_PROVIDER === 'gemini') {
+  } else if (provider === 'gemini') {
     // return await summarizeWithGemini(text, title);
-    throw new Error('Gemini API는 현재 주석처리되어 있습니다.');
+    throw new Error('Gemini provider는 현재 비활성화되어 있습니다.');
   } else {
-    throw new Error(`알 수 없는 LLM_PROVIDER: ${LLM_PROVIDER}`);
+    throw new Error(`알 수 없는 LLM_PROVIDER: ${provider}`);
   }
 }
 

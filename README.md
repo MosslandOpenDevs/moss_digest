@@ -29,7 +29,7 @@ MossDigest collects data from various sources including Medium blogs, GitHub rep
 | mossland-blog | `https://medium.com/feed/mossland-blog` | Title, Date, Link, Summary, **AI Summary** |
 
 > **Note**: `@mosscoin` and `mossland-blog` point to the same publication, so we use only `mossland-blog` to avoid duplicates.
-> **AI Summary**: Automatically generates concise summaries using LM Studio (local LLM) or Google Gemini API
+> **AI Summary**: Automatically generates concise summaries using LM Studio (local LLM). Google Gemini is supported but disabled by default (see AI Summarization Setup).
 
 ### GitHub Repositories
 
@@ -57,7 +57,7 @@ Parses date-based disclosure links from `Disclosure-and-Materials/README.md` to 
 **Features:**
 - Automatic content fetching from disclosure links
 - **AI-powered summarization** of disclosure documents (PDF, HTML)
-- Support for both local LLM (LM Studio) and cloud API (Google Gemini)
+- Local LLM (LM Studio) summarization; cloud API (Google Gemini) optional and disabled by default
 
 ---
 
@@ -83,21 +83,27 @@ MossDigest/
 │   │   └── summarizer.js   # AI summarization (LM Studio + Gemini)
 │   ├── commands/
 │   │   ├── collect.js
-│   │   └── generate.js
+│   │   ├── generate.js
+│   │   ├── run.js
+│   │   ├── build-web.js
+│   │   ├── scheduler.js
+│   │   └── sources.js
 │   └── index.js
 ├── templates/              # Report templates
 │   ├── summary.html.ejs
 │   └── detail.html.ejs
-├── data/                   # Collected raw data
+├── test/                   # Unit tests (node:test, no extra deps)
+├── data/                   # Collected raw data (git-ignored)
 │   └── {year}/
-│       ├── raw/
-│       └── processed/
-├── reports/                # Generated reports
+│       ├── monthly/        # {year}-{MM}.json
+│       ├── quarterly/      # {year}-Q{n}.json
+│       └── annual/         # {year}.json
+├── reports/                # Generated reports (git-ignored)
 │   └── {year}/
-│       ├── monthly/
-│       ├── quarterly/
-│       └── annual/
-├── web/                    # Entry point page
+│       ├── monthly/{MM}/summary.html
+│       ├── quarterly/Q{n}/summary.html
+│       └── annual/summary.html
+├── web/                    # Entry point page (git-ignored)
 │   └── index.html
 ├── package.json
 └── README.md
@@ -232,8 +238,8 @@ DISCORD_WEBHOOK_URL=
 │                            ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │                      Data Store                             ││
-│  │                  data/{year}/raw/                           ││
-│  │                  data/{year}/processed/                     ││
+│  │          data/{year}/monthly | quarterly | annual/          ││
+│  │                 (collected JSON per period)                 ││
 │  └─────────────────────────┬───────────────────────────────────┘│
 │                            ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐│
@@ -245,7 +251,7 @@ DISCORD_WEBHOOK_URL=
 │          ▼                                   ▼                  │
 │  ┌───────────────┐                   ┌───────────────┐          │
 │  │ summary.html  │                   │  detail.pdf   │          │
-│  │   (Summary)   │                   │   (Detail)    │          │
+│  │   (Summary)   │                   │  (disabled)   │          │
 │  └───────────────┘                   └───────────────┘          │
 │                            │                                    │
 │                            ▼                                    │
@@ -290,10 +296,9 @@ DISCORD_WEBHOOK_URL=
 
 ### Entry Point Page (web/index.html)
 
-- Year/month report navigation
-- Quick access to latest reports
-- Search/filter functionality
-- Download links (HTML, PDF)
+- Lists all generated reports, grouped by year and period (newest first)
+- One-click access to each report's Summary (HTML)
+- Rebuilt with `mossdigest build-web` after generating reports
 
 ---
 
@@ -310,7 +315,7 @@ DISCORD_WEBHOOK_URL=
 | Scheduling | `node-cron` |
 | CLI Interface | `commander` |
 | **AI Summarization (Local)** | **`openai` (LM Studio compatible)** |
-| **AI Summarization (Cloud)** | **`@google/generative-ai` (Gemini)** |
+| **AI Summarization (Cloud, optional)** | **`@google/generative-ai` (Gemini — not installed by default, see below)** |
 | **PDF Text Extraction** | **`pdf-parse`** |
 | **Charts & Visualization** | **Chart.js (CDN)** |
 
@@ -334,17 +339,20 @@ MossDigest supports two LLM providers for automatic content summarization:
    LMSTUDIO_MODEL=qwen2.5-32b-instruct
    ```
 
-### Option 2: Google Gemini API
+> **Tip**: See [local-llm-summarization-tuning-report.md](./local-llm-summarization-tuning-report.md) for latency/throughput tuning notes (context length, GPU offload) measured on a local Qwen2.5-32B server.
 
-1. **Get API Key** from [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. **Configure .env**
+### Option 2: Google Gemini API (disabled by default)
+
+1. **Install the SDK**: `npm install @google/generative-ai` (removed from default dependencies)
+2. **Uncomment** the Gemini sections in `src/utils/summarizer.js`
+3. **Get API Key** from [Google AI Studio](https://makersuite.google.com/app/apikey)
+4. **Configure .env**
    ```env
    LLM_PROVIDER=gemini
    GEMINI_API_KEY=your_api_key_here
    ```
 
-> **Note**: Gemini code is currently commented out in `src/utils/summarizer.js`.
-> To use Gemini, uncomment the Gemini-related code sections.
+> **Note**: The Gemini implementation is currently commented out in `src/utils/summarizer.js`, so LM Studio is the only working provider out of the box. Setting `LLM_PROVIDER=gemini` without completing the steps above disables AI summarization (collection still runs; summaries are skipped).
 
 ---
 
@@ -352,17 +360,13 @@ MossDigest supports two LLM providers for automatic content summarization:
 
 ### Data Source Management
 
+Data sources are configured by editing `config/sources.json` directly.
+
 ```bash
 # List configured sources
 npx mossdigest sources list
 
-# Add new repository
-npx mossdigest sources add-repo
-
-# Add new organization
-npx mossdigest sources add-org
-
-# Validate configuration
+# Validate config/sources.json against the schema
 npx mossdigest sources validate
 ```
 
@@ -515,10 +519,10 @@ npx mossdigest scheduler start
 | **Phase 2.6** | **GitHub Activity Stats (PR, Issue, Contributors)** | ✅ **Complete** |
 | **Phase 3** | Report generators (HTML with Dark Mode) | ✅ **Complete** |
 | **Phase 3.5** | **Monthly Commit Trend Graph** | ✅ **Complete** |
-| **Phase 4** | Quarterly/Annual reports (Monthly data aggregation) | 🟡 In Progress |
-| **Phase 5** | Entry point page | 🟡 Planned |
-| **Phase 6** | CLI completion | 🟡 In Progress |
-| **Phase 7** | Auto scheduling | 🔴 Planned |
+| **Phase 4** | Quarterly/Annual reports (Monthly data aggregation) | ✅ **Complete** |
+| **Phase 5** | Entry point page (`build-web`) | ✅ **Complete** |
+| **Phase 6** | CLI (collect / generate / run / sources / build-web / scheduler) | ✅ **Complete** |
+| **Phase 7** | Auto scheduling (`scheduler start`) | ✅ **Complete** |
 | **Phase 8** | PDF report generation (re-enable) | 🔴 Optional |
 
 ---
