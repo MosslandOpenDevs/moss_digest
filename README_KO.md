@@ -1,5 +1,9 @@
 # MossDigest
 
+<!-- opendevs-badges:start -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-64748b?style=flat)](README.md#-license)
+<!-- opendevs-badges:end -->
+
 🌐 [English](./README.md)
 
 Mossland 프로젝트의 활동을 자동 수집하여 월간/분기/연간 보고서를 생성하는 자동화 파이프라인

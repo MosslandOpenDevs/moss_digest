@@ -1,5 +1,9 @@
 # MossDigest
 
+<!-- opendevs-badges:start -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-64748b?style=flat)](README.md#-license)
+<!-- opendevs-badges:end -->
+
 🌐 [한국어](./README_KO.md)
 
 An automated pipeline that collects Mossland project activities and generates monthly, quarterly, and annual reports.
